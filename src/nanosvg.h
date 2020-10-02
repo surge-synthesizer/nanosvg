@@ -860,6 +860,27 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 
 	if (data->type == NSVG_PAINT_LINEAR_GRADIENT) {
 		float x1, y1, x2, y2, dx, dy;
+                if( data->linear.x1.units == NSVG_UNITS_USER )
+                {
+                   data->linear.x1.value *= 100;
+                   data->linear.x1.units = NSVG_UNITS_PERCENT;
+                }
+                if( data->linear.x2.units == NSVG_UNITS_USER )
+                {
+                  data->linear.x2.value *= 100;
+                  data->linear.x2.units = NSVG_UNITS_PERCENT;
+                }
+                if( data->linear.y1.units == NSVG_UNITS_USER )
+                {
+                  data->linear.y1.value *= 100;
+                  data->linear.y1.units = NSVG_UNITS_PERCENT;
+                }
+
+                if( data->linear.y2.units == NSVG_UNITS_USER )
+                {
+                  data->linear.y2.value *= 100;
+                  data->linear.y2.units = NSVG_UNITS_PERCENT;
+                }
 		x1 = nsvg__convertToPixels(p, data->linear.x1, ox, sw);
 		y1 = nsvg__convertToPixels(p, data->linear.y1, oy, sh);
 		x2 = nsvg__convertToPixels(p, data->linear.x2, ox, sw);
