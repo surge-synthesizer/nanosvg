@@ -75,7 +75,8 @@ enum NSVGpaintType {
 	NSVG_PAINT_NONE = 0,
 	NSVG_PAINT_COLOR = 1,
 	NSVG_PAINT_LINEAR_GRADIENT = 2,
-	NSVG_PAINT_RADIAL_GRADIENT = 3
+	NSVG_PAINT_RADIAL_GRADIENT = 3,
+        NSVG_PAINT_DEFERRED_LOOKUP = 4, // When we parse we looked for a gradient that wasn't there. Check post parse
 };
 
 enum NSVGspreadType {
@@ -124,6 +125,8 @@ typedef struct NSVGpaint {
 		unsigned int color;
 		NSVGgradient* gradient;
 	};
+        char gradientName[64];
+        float gradientLocalBounds[6];
 } NSVGpaint;
 
 typedef struct NSVGpath
@@ -183,6 +186,8 @@ void nsvgDelete(NSVGimage* image);
 
 #endif // NANOSVG_H
 
+//HERE1
+//#define NANOSVG_IMPLEMENTATION
 #ifdef NANOSVG_IMPLEMENTATION
 
 #include <string.h>
@@ -860,26 +865,30 @@ static NSVGgradient* nsvg__createGradient(NSVGparser* p, const char* id, const f
 
 	if (data->type == NSVG_PAINT_LINEAR_GRADIENT) {
 		float x1, y1, x2, y2, dx, dy;
-                if( data->linear.x1.units == NSVG_UNITS_USER )
-                {
-                   data->linear.x1.value *= 100;
-                   data->linear.x1.units = NSVG_UNITS_PERCENT;
-                }
-                if( data->linear.x2.units == NSVG_UNITS_USER )
-                {
-                  data->linear.x2.value *= 100;
-                  data->linear.x2.units = NSVG_UNITS_PERCENT;
-                }
-                if( data->linear.y1.units == NSVG_UNITS_USER )
-                {
-                  data->linear.y1.value *= 100;
-                  data->linear.y1.units = NSVG_UNITS_PERCENT;
-                }
 
-                if( data->linear.y2.units == NSVG_UNITS_USER )
+                if( data->units == NSVG_OBJECT_SPACE )
                 {
-                  data->linear.y2.value *= 100;
-                  data->linear.y2.units = NSVG_UNITS_PERCENT;
+                   if (data->linear.x1.units == NSVG_UNITS_USER)
+                   {
+                      data->linear.x1.value *= 100;
+                      data->linear.x1.units = NSVG_UNITS_PERCENT;
+                   }
+                   if (data->linear.x2.units == NSVG_UNITS_USER)
+                   {
+                      data->linear.x2.value *= 100;
+                      data->linear.x2.units = NSVG_UNITS_PERCENT;
+                   }
+                   if (data->linear.y1.units == NSVG_UNITS_USER)
+                   {
+                      data->linear.y1.value *= 100;
+                      data->linear.y1.units = NSVG_UNITS_PERCENT;
+                   }
+
+                   if (data->linear.y2.units == NSVG_UNITS_USER)
+                   {
+                      data->linear.y2.value *= 100;
+                      data->linear.y2.units = NSVG_UNITS_PERCENT;
+                   }
                 }
 		x1 = nsvg__convertToPixels(p, data->linear.x1, ox, sw);
 		y1 = nsvg__convertToPixels(p, data->linear.y1, oy, sh);
@@ -1011,8 +1020,11 @@ static void nsvg__addShape(NSVGparser* p)
 		nsvg__getLocalBounds(localBounds, shape, inv);
 		shape->fill.gradient = nsvg__createGradient(p, attr->fillGradient, localBounds, &shape->fill.type);
 		if (shape->fill.gradient == NULL) {
-			shape->fill.type = NSVG_PAINT_NONE;
-		}
+			// shape->fill.type = NSVG_PAINT_NONE;
+                        shape->fill.type = NSVG_PAINT_DEFERRED_LOOKUP;
+                        strcpy( shape->fill.gradientName, attr->fillGradient );
+                        for( int i=0; i<6; ++i ) shape->fill.gradientLocalBounds[i ] = localBounds[i];
+                }
 	}
 
 	// Set stroke
@@ -2596,7 +2608,7 @@ static void nsvg__parseGradient(NSVGparser* p, const char** attr, char type)
 			grad->id[63] = '\0';
 		} else if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
 			if (strcmp(attr[i], "gradientUnits") == 0) {
-				if (strcmp(attr[i+1], "objectBoundingBox") == 0)
+				if (strcmp(attr[i+1], "objectBoundingBox") == 0 )
 					grad->units = NSVG_OBJECT_SPACE;
 				else
 					grad->units = NSVG_USER_SPACE;
@@ -2907,7 +2919,24 @@ NSVGimage* nsvgParse(char* input, const char* units, float dpi)
 
 	nsvg__parseXML(input, nsvg__startElement, nsvg__endElement, nsvg__content, p);
 
-	// Scale to viewBox
+        // OK so do any of our shapes have deferred gradients
+        for (auto shape = p->image->shapes; shape != NULL; shape = shape->next)
+        {
+           if( shape->fill.type == NSVG_PAINT_DEFERRED_LOOKUP )
+           {
+              shape->fill.type = NSVG_PAINT_NONE;
+              for( auto g = p->gradients; g != nullptr; g = g->next )
+              {
+                 if( strcmp( g->id, shape->fill.gradientName ) == 0 )
+                 {
+                    shape->fill.gradient = nsvg__createGradient(p, shape->fill.gradientName, shape->fill.gradientLocalBounds, &shape->fill.type);
+                 }
+              }
+              fflush(stdout);
+           }
+        }
+
+      // Scale to viewBox
 	nsvg__scaleToViewbox(p, units);
 
 	ret = p->image;
