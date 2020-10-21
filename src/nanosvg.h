@@ -126,7 +126,7 @@ typedef struct NSVGpaint {
 		NSVGgradient* gradient;
 	};
         char gradientName[64];
-        float gradientLocalBounds[6];
+        float gradientLocalBounds[4];
 } NSVGpaint;
 
 typedef struct NSVGpath
@@ -1023,7 +1023,7 @@ static void nsvg__addShape(NSVGparser* p)
 			// shape->fill.type = NSVG_PAINT_NONE;
                         shape->fill.type = NSVG_PAINT_DEFERRED_LOOKUP;
                         strcpy( shape->fill.gradientName, attr->fillGradient );
-                        for( int i=0; i<6; ++i ) shape->fill.gradientLocalBounds[i ] = localBounds[i];
+                        for( int i=0; i<4; ++i ) shape->fill.gradientLocalBounds[i ] = localBounds[i];
                 }
 	}
 
